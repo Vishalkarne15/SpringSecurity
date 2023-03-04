@@ -1,0 +1,115 @@
+Demo File.
+
+UWCL_LLMS_TRN_PARTNER
+(
+LLMS_TRN_PARTNER_ID	NUMBER,
+REQ_REF_NUM	VARCHAR2(10 BYTE),
+NAME	VARCHAR2(50 BYTE),
+RPD_TYPE	VARCHAR2(5 BYTE),
+CREATED_BY	VARCHAR2(10 BYTE),
+CREATED_ON	DATE,
+UPDATED_BY	VARCHAR2(10 BYTE),
+UPDATED_ON	DATE,
+CONSTARINT LLMS_TRN_PARTNER_ID_PK PRIMARY KEY(LLMS_TRN_PARTNER_ID)
+)
+
+
+create or replace TYPE                   "ACCOUNT_OBJ"                                          AS OBJECT (fname varchar2(20),
+newAddress NEW_ADDRS_OBJ_ARRAY)
+
+
+create or replace TYPE                   "LLMS_RPD_API_OBJ"                                          AS OBJECT
+(
+RPD_NAME	VARCHAR2(100),
+RPD_FLAG	VARCHAR2(10),
+);
+
+create or replace TYPE                   "LLMS_RPD_API_ARR"                                          AS TABLE OF "LLMS_RPD_API_OBJ";
+
+CREATE SEQUENCE ADVPACE_SEQ_DEV.SEQ_UWCL_LLMSTRN_PARTNER INCREMENT BY 1 MAXVALUE 99999999999999999999 MINVALUE 1 CACHE 10000;
+
+
+Java Code.
+
+package com.psm.api.dao.impl;
+
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.SqlParameter;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.simple.SimpleJdbcCall;
+import org.springframework.jdbc.core.support.AbstractSqlTypeValue;
+import org.springframework.stereotype.Repository;
+
+import com.psm.api.base.bean.LlmsRPDDataRequestBean;
+import com.psm.api.base.bean.RPDDataBean;
+import com.psm.api.dao.AdvPaceLoadLlmsRPDDao;
+
+import oracle.jdbc.OracleTypes;
+import oracle.sql.ARRAY;
+import oracle.sql.ArrayDescriptor;
+import oracle.sql.STRUCT;
+import oracle.sql.StructDescriptor;
+
+@Repository("advPaceLoadLlmsRPDDaoImpl")
+public class AdvPaceLoadLlmsRPDDaoImpl implements AdvPaceLoadLlmsRPDDao {
+
+	private static final Logger logger = LogManager.getLogger(AdvPaceLoadLlmsRPDDaoImpl.class);
+
+	@Autowired
+	private JdbcTemplate jdbcTemplate;
+	
+	public List<RPDDataBean> rpdSaveToDB(LlmsRPDDataRequestBean llmsRPDDataBean){
+		
+		llmsRPDDataBean.getRpdDataList().forEach(rpdDataObj->System.out.println(rpdDataObj));
+		
+		
+		
+		SimpleJdbcCall jdbcStorProcCall = new SimpleJdbcCall(jdbcTemplate).withProcedureName("SAVE_UPDATE_RPD_DATA").withCatalogName("PKG_APT_LLMS_RPD_API");
+		MapSqlParameterSource sqlParameterSourceIn = new MapSqlParameterSource();
+		sqlParameterSourceIn.addValue("P_REF_NUM", (StringUtils.isNotEmpty(llmsRPDDataBean.getReferenceNumber()))?llmsRPDDataBean.getReferenceNumber():"NA");
+		sqlParameterSourceIn.addValue("P_RPD_DATA_LIST", new AbstractSqlTypeValue() {
+
+			@Override
+			protected Object createTypeValue(Connection conn, int sqlType, String typeName)
+					throws SQLException {
+
+				ARRAY rpdFieldArray = null;
+				STRUCT rpdFieldStruct = null;
+				STRUCT[] rpdFieldStructArray = new STRUCT[llmsRPDDataBean.getRpdDataList().size()];
+
+				StructDescriptor rpdFieldObjectDesc = StructDescriptor
+						.createDescriptor("LLMS_RPD_API_OBJ", conn);
+				ArrayDescriptor rpdFieldArrayDesc = ArrayDescriptor
+						.createDescriptor("LLMS_RPD_API_ARR", conn);
+				int i = 0;
+
+				for (RPDDataBean rpdDataBean : llmsRPDDataBean.getRpdDataList()) {
+
+					Object[] bankStmtFieldObject = { rpdDataBean.getRpdName(),rpdDataBean.getRpdFlag()};
+					rpdFieldStruct = new STRUCT(rpdFieldObjectDesc, conn, bankStmtFieldObject);
+					rpdFieldStructArray[i] = rpdFieldStruct;
+					i++;
+				}
+
+				rpdFieldArray = new ARRAY(rpdFieldArrayDesc, conn, rpdFieldStructArray);
+
+				return rpdFieldArray;
+			}
+		}, OracleTypes.ARRAY);
+
+		Map<String, Object> out = jdbcStorProcCall.execute(sqlParameterSourceIn);
+		
+		
+		return null;
+	}
+	
+}
