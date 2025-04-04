@@ -1,0 +1,1 @@
+1. SpringSecurity01BasicApplication is basic application with out of using spring security dependency.
